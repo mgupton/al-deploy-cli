@@ -1,8 +1,7 @@
 """
 Usage:
-    al-deploy-cli init [--global-role-arn=<arn>] [--config-bucket-arn=<arn>] --aws-account-id=<account_id> [--appliances=<appliance_type>]
-    al-deploy-cli plan [--global-role-arn=<arn>] --aws-account-id=<account_id> [--appliances=<appliance_type>]
-    al-deploy-cli execute [--global-role-arn=<arn>] --aws-account-id=<account_id> [--appliances=<appliance_type>]
+    al-deploy-cli plan [--global-role-arn=<arn>] [--config-bucket-arn=<config_bucket_arn>] [--aws-account-id=<account_id>] [--appliances=<appliance_type>]
+    al-deploy-cli execute [--global-role-arn=<arn>] [--config-bucket-arn=<config_bucket_arn>] [--aws-account-id=<account_id>] [--appliances=<appliance_type>]
 Options:
     --appliances=<appliance_type>       (ids|scan|both), default: both
 """
@@ -15,11 +14,11 @@ import json
 
 def main():
     args = docopt(__doc__)
-    al_deploy_cli = AlDeployCli(args["--global-role-arn"], args["--config-bucket-arn"])
+    al_deploy_cli = AlDeployCli(args["--global-role-arn"], args["--config-bucket-arn"], args["--aws-account-id"])
 
-    if args["init"]:
+    if args["plan"]:
         al_deploy_cli.deploy_init()
-    elif args["update"]:
+    elif args["execute"]:
         al_deploy_cli.deploy_update()
 
 
@@ -28,11 +27,13 @@ class AlDeployCli:
     __auth_token = None
     __config_file = "al-deploy.cfg"
     __local_config_file = "al-deploy-local.cfg"
+    __global_role_policy_name = "al-deploy-cli-global"
     __global_role_arn = None
     __global_role_name = None
     __config_bucket = None
     __config_bucket_region = None
     __config = {}
+    __aws_account_id = None
     
     __aws_access_key = None
     __aws_secret_key = None
@@ -49,7 +50,7 @@ class AlDeployCli:
             AlDeployCli()
         return AlDeployCli.__instance
  
-    def __init__(self, global_role_arn, config_bucket_arn):
+    def __init__(self, global_role_arn, config_bucket_arn, aws_account_id):
         if AlDeployCli.__instance != None:
             raise Exception("This class is a singleton!")
         else:
@@ -57,10 +58,12 @@ class AlDeployCli:
             AlDeployCli.__global_role_arn = global_role_arn
             AlDeployCli.__config_bucket = config_bucket_arn
 
+            AlDeployCli.__aws_account_id = aws_account_id
+
             self.load_local_config()
             self.assume_global_role()
             self.load_config()
-            self.get_target_account_roles()
+            self.get_target_account_role(self.__aws_account_id)
     
     def assume_global_role(self):
 
@@ -75,7 +78,7 @@ class AlDeployCli:
         self.__aws_session = boto3.Session(
             aws_access_key_id=self.__aws_access_key,
             aws_secret_access_key=self.__aws_secret_key,
-            aws_session_token=self.__target_aws_session_token,
+            aws_session_token=self.__aws_session_token,
         )
 
 
@@ -143,33 +146,22 @@ class AlDeployCli:
     def get_configured_scope(self):
         pass
 
-    def get_target_account_roles(self):
+    def get_target_account_role(self, aws_account_id):
         iam_client = self.__aws_session.client('iam')
 
-        # iam_client = boto3.client('iam',
-        #    aws_access_key_id = self.__aws_access_key,
-        #    aws_secret_access_key = self.__aws_secret_key,
-        #    aws_session_token = self.__aws_session_token
-        # )
-
         for role in iam_client.list_roles()['Roles']:
-            if role['RoleArn'] == self.__global_role_arn:
+            if role['Arn'] == self.__global_role_arn:
                 self.__global_role_name = role['RoleName']
                 break
 
-        policy = iam_client.get_policy(
-            PolicyArn = self.__global_role_arn
-        )
-        
-        policy_version = iam_client.get_policy_version(
-            PolicyArn = self.__global_role_arn, 
-            VersionId = policy['Policy']['DefaultVersionId']
-        )
+        policy = iam_client.get_role_policy(RoleName=self.__global_role_name, PolicyName=self.__global_role_policy_name)
 
-        print(json.dumps(policy_version['PolicyVersion']['Document']))
-        print(json.dumps(policy_version['PolicyVersion']['Document']['Statement']))
+        for i, statement in enumerate(policy["PolicyDocument"]["Statement"]):
+            if statement["Action"] == "sts:AssumeRole":
+                for role_arn in policy["PolicyDocument"]["Statement"][i]["Resource"]:
+                    print(role_arn)
         pass
-    
+
     @staticmethod
     def deploy_init():
         pass
