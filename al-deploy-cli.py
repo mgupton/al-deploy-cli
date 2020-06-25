@@ -58,6 +58,7 @@ class AlDeployCli:
         if AlDeployCli.__instance is None:
             AlDeployCli()
         return AlDeployCli.__instance
+
  
     def __init__(self, global_role_arn, config_bucket_arn, aws_account_id):
         if AlDeployCli.__instance != None:
@@ -73,7 +74,8 @@ class AlDeployCli:
             self.assume_global_role()
             self.load_config()
             self.get_target_account_role(self.__aws_account_id)
-    
+
+
     def assume_global_role(self):
 
         self.__aws_session = boto3.Session(profile_name='al-deploy-cli-global')
@@ -89,6 +91,7 @@ class AlDeployCli:
             aws_secret_access_key=self.__aws_secret_key,
             aws_session_token=self.__aws_session_token,
         )
+
 
     def load_local_config(self):
         with open(self.__local_config_file) as file:
@@ -112,6 +115,7 @@ class AlDeployCli:
             else:
                 raise RuntimeError()
 
+
     def load_config(self):
         # s3_client = boto3.client('s3', region_name=self.__config_bucket_region,
         #    aws_access_key_id = self.__aws_access_key,
@@ -130,6 +134,7 @@ class AlDeployCli:
         AlDeployCli.al_api_access = self.get_secret(self.__config["al-api-access"]["al-api-secrets-id"],
             self.__config["al-api-access"]["al-api-secrets-region"])
 
+
     def get_secret(self, secret_id, secret_region):
         client = boto3.client(
             service_name='secretsmanager',
@@ -144,6 +149,7 @@ class AlDeployCli:
         secret = json.loads(secret_json['SecretString'])
 
         return secret
+
 
     def get_target_account_role(self, aws_account_id):
         __role_arn = None
@@ -164,10 +170,12 @@ class AlDeployCli:
                         __role_arn = role_arn
         return __role_arn
 
+
     def assume_target_role(self, target_role_arn):
         session = None
 
         sts = self.__aws_session.client('sts')
+
 
         sts = sts.assume_role(RoleArn=target_role_arn, RoleSessionName="AlDeployCli")
 
@@ -178,6 +186,7 @@ class AlDeployCli:
         )
 
         return session
+
 
     def add_account(self, account_id):
 
@@ -192,11 +201,29 @@ class AlDeployCli:
         buf["state"] = None
         self.__config["deployments"][account_id]["deployment_IAM_role_stack"] = buf
 
-    def update_deployment_config(self):
-        pass
-    
-    def update_stack_status(self):
-        pass
+
+    def update_deployment_config(self, session):
+        
+        for deployment in self.__config["deployments"]:
+            if self.__config["deployments"]["deployment_IAM_role_stack"]["status"] == None:
+                # create the IAM role stack
+                pass
+            elif self.__config["deployments"]["deployment_IAM_role_stack"]["status"] != "CREATE_COMPLETE":
+
+                if self.__config["deployments"]["deployent_IAM_role_stack"]["arn"] != None:
+                    status = self.get_stack_status(session, self.__config["deployments"]["deployent_IAM_role_stack"]["arn"])
+                else:
+                    pass
+
+
+    def get_stack_status(self, session, stack_id):
+        
+        cf = session.client("cloudformation")
+
+        stack = cf.describe_stacks(StackName=stack_id)
+
+        return stack["Stacks"][0]["StackStatus"]
+
 
     @staticmethod
     def plan():
@@ -289,6 +316,9 @@ class AlDeployCli:
 
         return session
 
+    def Test1(self):
+        pass
+    
     @staticmethod
     def get_al_api_credentials():
         pass
